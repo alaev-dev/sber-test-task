@@ -57,6 +57,19 @@ services:
     networks:
       - kafka-network
 
+  pgadmin:
+    container_name: pgadmin
+    image: dpage/pgadmin4
+    depends_on:
+      - postgres
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@psql.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    networks:
+      - kafka-network
+
 networks:
   kafka-network:
     driver: bridge

@@ -28,6 +28,13 @@ dependencies {
 
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
+    implementation("org.springframework.kafka:spring-kafka:3.3.5")
+    compileOnly("org.projectlombok:lombok:1.18.30")
+    implementation("org.mapstruct:mapstruct:1.5.5.Final")
+    implementation("org.mapstruct:mapstruct-processor:1.5.5.Final")
+    implementation("io.swagger.core.v3:swagger-annotations:2.2.15")
+    implementation("org.liquibase:liquibase-core:4.30.0")
+
 
     runtimeOnly("org.postgresql:postgresql")
 }
