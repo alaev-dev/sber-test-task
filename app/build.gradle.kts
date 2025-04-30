@@ -10,6 +10,7 @@ plugins {
     application
     id("org.springframework.boot") version "3.2.3"
     id("io.spring.dependency-management") version "1.1.4"
+    id ("com.google.cloud.tools.jib") version "3.4.5"
 }
 
 repositories {
@@ -30,10 +31,13 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.kafka:spring-kafka:3.3.5")
     compileOnly("org.projectlombok:lombok:1.18.30")
+    annotationProcessor("org.projectlombok:lombok:1.18.30")
     implementation("org.mapstruct:mapstruct:1.5.5.Final")
     implementation("org.mapstruct:mapstruct-processor:1.5.5.Final")
+    annotationProcessor("org.mapstruct:mapstruct-processor:1.5.5.Final")
     implementation("io.swagger.core.v3:swagger-annotations:2.2.15")
     implementation("org.liquibase:liquibase-core:4.30.0")
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0")
 
 
     runtimeOnly("org.postgresql:postgresql")
@@ -54,4 +58,8 @@ application {
 tasks.named<Test>("test") {
     // Use JUnit Platform for unit tests.
     useJUnitPlatform()
+}
+
+jib.to{
+    image = "app:latest"
 }
