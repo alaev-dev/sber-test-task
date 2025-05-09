@@ -1,22 +1,146 @@
 server:
-  port: 8080
+  port: 8080  # Порт, на котором будет работать Spring Boot приложение
 
 spring:
+  cache:
+    type: caffeine  # Тип используемого кэша
+    caffeine:
+      # Спецификация конфигурации кэша Caffeine:
+      # - maximumSize=1000: максимальное количество элементов в кэше
+      # - expireAfterWrite=5m: время жизни записи после создания/обновления (5 минут)
+      # - recordStats: включение сбора статистики использования кэша
+      spec: maximumSize=1000, expireAfterWrite=5m, recordStats
+    cache-names: messages_cache
+  jackson:
+    date-format: yyyy-MM-dd'T'HH:mm:ss'Z'  # Формат даты для JSON
+    time-zone: UTC  # Часовой пояс UTC
+  kafka:
+    bootstrap-servers: kafka1:9092,kafka2:9093,kafka3:9094  # Адреса Kafka брокеров (берётся из переменной)
+    topics:
+      inputTopic:
+        name: input-messages  # Название топика Kafka для входящих сообщений
+        partitions: 3  # Количество партиций по умолчанию
+        replicas: 3  # Фактор репликации по умолчанию
+        min-insync-replicas: 1  # Минимальное количество синхронизированных реплик
+      outputTopic:
+        name: output-messages  # Название топика Kafka для исходящих сообщений
+        partitions: 3
+        replicas: 3
+        min-insync-replicas: 1
+    listener:
+      retry:
+        interval: 1000  # Интервал между попытками повтора (1 сек)
+        max-attempts: 3  # Максимальное количество попыток
+    consumer:
+      group-id: message-group  # ID группы потребителей
+      auto-offset-reset: earliest  # Чтение с начала топика при отсутствии offset
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer  # Десериализатор ключа
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer  # Десериализатор значения
+      properties:
+        spring.json.type.mapping: >-  # Маппинг типов для десериализации
+          request:com.example.messagingapp.dto.MessageRequest,
+          response:com.example.messagingapp.dto.MessageResponse
+      isolation-level: read_committed  #Читает только закоммиченные сообщения
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer  # Сериализатор ключа
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer  # Сериализатор значения
+      acks: all  #Гарантирует запись во все реплики
+      retries: 3  #Автоматические повторы при ошибках
+      enable-idempotence: true  #Предотвращает дублирование сообщений
+  flyway:
+    enabled: true  # Включение Flyway
+    user: postgres  # Пользователь БД для Flyway
+    password: postgres  # Пароль для Flyway
+    url: jdbc:postgresql://postgres:5432/messagedb  # URL БД для Flyway
+    locations: classpath:db/migration  # Расположение миграций
   datasource:
-    url: jdbc:postgresql://localhost:5432/postgres
-    username: postgres
-    password: postgres
-    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://postgres:5432/messagedb  # URL основной БД
+    username: postgres  # Пользователь основной БД
+    password: postgres  # Пароль основной БД
+    driver-class-name: org.postgresql.Driver  # Драйвер PostgreSQL
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate  # Режим работы Hibernate (валидация схемы)
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
-        format_sql: true
-    show-sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect  # Диалект PostgreSQL
+        format_sql: true  # Форматирование SQL в логах
+    show-sql: true  # Показывать SQL в логах
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html  # Путь к Swagger UI
+    enabled: true  # Включение Swagger UI
+    tagsSorter: alpha  # Сортировка тегов по алфавиту
+    operationsSorter: alpha  # Сортировка операций по алфавиту
+  api-docs:
+    path: /api-docs  # Путь к OpenAPI спецификации
+    version: openapi_3_1  # Версия OpenAPI
 
 logging:
   level:
-    org.hibernate.SQL: DEBUG
-    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+    org.springframework.cache: TRACE  # Уровень логирования для кэша
+    org.hibernate.SQL: DEBUG  # Уровень логирования SQL запросов
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE  # Уровень логирования параметров SQL
+    root: INFO  # Общий уровень логирования
+    org.springframework: INFO  # Уровень логирования Spring
+    org.apache.kafka: INFO  # Уровень логирования Kafka
+    com.example.messagingapp: INFO  # Уровень логирования приложения
+  file:
+    name: app/logs/application.log  # Путь к файлу логов
+  pattern:
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"  # Формат логов в файле
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"  # Формат логов в консоли
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:  # Общая конфигурация
+        # Тип скользящего окна для подсчета ошибок:
+        # COUNT_BASED - анализировать последние N вызовов
+        # TIME_BASED - анализировать вызовы за последний период времени
+        slidingWindowType: COUNT_BASED  # Анализ последних 10 вызовов
+        # Размер скользящего окна:
+        # Для COUNT_BASED - количество последних вызовов (10)
+        # Для TIME_BASED - временной период в секундах
+        slidingWindowSize: 10           # Размер окна мониторинга
+        # Минимальное количество вызовов перед активацией CB:
+        # Circuit Breaker начнет работать только после 5 вызовов
+        minimumNumberOfCalls: 5         # Минимум вызовов для анализа
+        # Автопереход из состояния OPEN (разомкнуто) в HALF_OPEN (полуразомкнуто)
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        # Время в открытом состоянии:
+        # После активации CB останется открытым 5 секунд перед переходом в полуоткрытое
+        waitDurationInOpenState: 5s     # Время в открытом состоянии
+        # Порог процента ошибок для срабатывания (50%):
+        # Если 50% или более вызовов из окна завершатся ошибкой - CB активируется
+        failureRateThreshold: 50        # Порог срабатывания (50%)
+        # Количество разрешенных вызовов в полуоткрытом состоянии:
+        # В полуоткрытом состоянии пропустит 3 вызова для проверки восстановления
+        permittedNumberOfCallsInHalfOpenState: 3  # Тестовые вызовы
+        eventConsumerBufferSize: 10     # Буфер событий, хранит 10 последних событий
+
+    instances:
+      kafkaProducer:
+        baseConfig: default
+        recordExceptions:  # Специфичные для Kafka ошибки
+          - org.springframework.kafka.KafkaException  # Ошибки работы с Kafka
+          - java.util.concurrent.TimeoutException  # Таймауты при взаимодействии
+
+      messageService:
+        baseConfig: default
+        recordExceptions:  # Общие ошибки сервиса
+          - org.springframework.dao.DataAccessException  # Ошибки доступа к данным
+          - java.lang.RuntimeException  # Все runtime ошибки
+        ignore-exceptions:
+          - com.example.messagingapp.exception.MessageExistsToDataBase
+          - com.example.messagingapp.exception.MessagesNotFound
+          - com.example.messagingapp.exception.MessageNotFoundById
+
+      messageStatisticService:
+        baseConfig: default
+        recordExceptions:  # Ошибки статистики
+          - org.springframework.dao.DataAccessException # Ошибки доступа к данным
+          - java.lang.RuntimeException  # Все runtime ошибки
+        ignore-exceptions:
+          - com.example.messagingapp.exception.MessageStatisticIsEmpty

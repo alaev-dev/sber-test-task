@@ -8,13 +8,23 @@
 plugins {
     // Apply the application plugin to add support for building a CLI application in Java.
     application
-    id("org.springframework.boot") version "3.2.3"
+    id("org.springframework.boot") version "3.1.5"
     id("io.spring.dependency-management") version "1.1.4"
+    alias(libs.plugins.lombok.plugin)
+    id("java")
+    jacoco
+
 }
 
 repositories {
     // Use Maven Central for resolving dependencies.
     mavenCentral()
+}
+
+dependencyManagement {
+    imports {
+        mavenBom ("org.springframework.cloud:spring-cloud-dependencies:2022.0.4")
+    }
 }
 
 dependencies {
@@ -26,25 +36,113 @@ dependencies {
     // This dependency is used by the application.
     implementation(libs.guava)
 
+    compileOnly(libs.lombok)
+    annotationProcessor(libs.lombok)
+
+    testCompileOnly(libs.lombok)
+    testAnnotationProcessor(libs.lombok)
+
+    implementation(libs.mapstruct)
+    annotationProcessor(libs.mapstruct.processor)
+
+    annotationProcessor(libs.lombok.mapstruct.binding)
+
     implementation("org.springframework.boot:spring-boot-starter-web")
+    implementation("org.springframework.boot:spring-boot-starter-validation")
+    testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    implementation("org.springframework.boot:spring-boot-starter-cache")
+    implementation("com.github.ben-manes.caffeine:caffeine:3.1.8")
+
+    implementation("org.springframework.kafka:spring-kafka:3.1.3")
+    implementation("org.apache.kafka:kafka-clients:3.7.1")
+    implementation("org.springframework.retry:spring-retry:2.0.11")
+
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.5.0")
+
+    implementation ("org.springframework.boot:spring-boot-starter-aop")
+    implementation ("io.github.resilience4j:resilience4j-spring-boot3:2.1.0")
+    implementation("org.springframework.cloud:spring-cloud-starter-circuitbreaker-resilience4j")
+    implementation ("io.github.resilience4j:resilience4j-reactor:2.1.0")
+
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.15.3")
+    implementation("org.springframework.boot:spring-boot-configuration-processor")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
+    implementation("org.flywaydb:flyway-core")
+
+
+
+    implementation("org.springframework:spring-tx")
 
     runtimeOnly("org.postgresql:postgresql")
+
+
+}
+configurations.all {
+    resolutionStrategy {
+        // Принудительно заменяем все транзитивные зависимости Kafka
+        force("org.apache.kafka:kafka-clients:3.7.1")
+    }
 }
 
 // Apply a specific Java toolchain to ease working on different environments.
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
+        languageVersion = JavaLanguageVersion.of(17)
     }
 }
 
 application {
     // Define the main class for the application.
-    mainClass = "org.example.App"
+    mainClass = "com.example.MessageAppApplication"
 }
 
 tasks.named<Test>("test") {
     // Use JUnit Platform for unit tests.
     useJUnitPlatform()
 }
+
+tasks.withType<JavaCompile> {
+    options.compilerArgs.addAll(
+        listOf(
+            "-Amapstruct.defaultComponentModel=spring",
+            "-Amapstruct.suppressGeneratorTimestamp=true"
+        )
+    )
+}
+
+tasks.bootJar {
+    archiveFileName.set("app.jar")
+}
+
+jacoco {
+    toolVersion = "0.8.12"
+}
+
+tasks.test {
+    finalizedBy(tasks.jacocoTestReport)  // Генерировать отчёт после тестов
+}
+
+tasks.jacocoTestReport {
+    dependsOn(tasks.test)  // Отчёт зависит от выполнения тестов
+    reports {
+        html.required.set(true)  // Включить HTML-отчёт (по умолчанию в `build/reports/jacoco/test/html`)
+        xml.required.set(false)  // Отключить XML (если не нужен для CI)
+        csv.required.set(false)  // Отключить CSV
+    }
+}
+
+tasks.jacocoTestReport {
+    classDirectories.setFrom(
+        files(classDirectories.files.map {
+            fileTree(it).exclude(
+                "**/config/**",     // Исключить классы конфигурации
+                "**/dto/**",        // Исключить DTO
+                "**/entity/**",     // Исключить Entity
+                "**/kafka/**",      // Исключить Kafka
+                "**/exception/**"  // Исключить исключения
+            )
+        })
+    )
+}
+
